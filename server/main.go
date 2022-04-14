@@ -6,6 +6,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -78,7 +80,25 @@ type Slots struct {
 	Hour     string `json:"hour"`
 }
 
-func getNearestBooking(loc Location, minRes int, authToken string) ([]Slots, error) {
+func isStrDateAfterDate(d1, d2 string) (bool, error) {
+	if d2 == "" {
+		return false, nil
+	}
+	if strings.Contains(d1, "T") {
+		d1 = strings.Split(d1, "T")[0]
+	}
+	d1d, err := time.Parse("2006-01-02", d1)
+	if err != nil {
+		return false, err
+	}
+	d2d, err := time.Parse("2006-01-02", d2)
+	if err != nil {
+		return false, err
+	}
+	return d1d.After(d2d), nil
+}
+
+func getNearestBooking(loc Location, minRes int, startDate, toDate, authToken string) ([]Slots, error) {
 	var slots []Slots
 	type Calendar struct {
 		CalendarDate string
@@ -97,7 +117,7 @@ func getNearestBooking(loc Location, minRes int, authToken string) ([]Slots, err
 		ErrorMessage string         `json:"ErrorMessage"`
 		Results      []CalendarSlot `json:"Results"`
 	}
-	url := fmt.Sprintf("https://central.qnomy.com/CentralAPI/SearchAvailableDates?maxResults=50&serviceId=%v&startDate=2022-04-10", loc.ServiceId)
+	url := fmt.Sprintf("https://central.qnomy.com/CentralAPI/SearchAvailableDates?maxResults=50&serviceId=%v&startDate=%s", loc.ServiceId, startDate)
 	fmt.Printf("searching for %s using serviceId %v\n", loc.Name, loc.ServiceId)
 	body, err := doAuthRequest(url, authToken)
 	if err != nil {
@@ -116,6 +136,14 @@ func getNearestBooking(loc Location, minRes int, authToken string) ([]Slots, err
 	}
 	for _, cal := range res.Results {
 		fmt.Printf("checking date %s\n", cal.CalendarDate)
+		isAfter, err := isStrDateAfterDate(cal.CalendarDate, toDate)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse dates. err=%v", err)
+		}
+		if isAfter {
+			fmt.Printf("date %s is beyond end date=%s\n", cal.CalendarDate, toDate)
+			break
+		}
 		url := fmt.Sprintf("https://central.qnomy.com/CentralAPI/SearchAvailableSlots?CalendarId=%v&ServiceId=%v", cal.CalendarId, loc.ServiceId)
 		body, err := doAuthRequest(url, authToken)
 		if err != nil {
@@ -167,10 +195,14 @@ func getLocationHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, locs)
 }
 
+const Auth string = "JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6InljeDFyWFRmalRjQjZIQWV1aGxWQklZZmZUbyJ9.eyJpc3MiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJhdWQiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJuYmYiOjE2NDk2NzkyOTEsImV4cCI6MTY4MDc4MzI5MSwidW5pcXVlX25hbWUiOiI4NWNhYjBlYS1mZmQ1LTQyN2EtOGY5ZS1mNDRhNzllZTIyMzYifQ.HHWPOnU977opC033SMXi1TbVsCfZYrWXcs8Up4FLN98Qpnq3dQE0lVHUNGeHzHMVqFvIAMP10X9A5kTqoVdM_iymRdW_VCL7KnhbYxFzp-SuDzfEEV3y9r-cSYcKnxGbJTXGR23aJBOPNR3Uw37GX6RWsClDKASCBNQMfSfCl8ZlJcnZaCMyaHZl6shp3o0u-ldva98aOhhTK2epVveP5Xwvfzi1xVgRAo9hP5eSVOEumTINDrX9APL2tjHqLux6MYczQEMarLWtjvqHTSYJ4lyX88fSYZHxXR0gypTh54zvHMko_HVY6Cu88kzLcS5dm3E0PMWF-hRpA-cR62fVWw"
+
 func getAppointments(c *gin.Context) {
 	type Input struct {
 		Locations []Location `json:"locations" binding:"required"`
-		Auth      string     `json:"jwt" binding:"required"`
+		StartDate string     `json:"fromDate" binding:"required"`
+		EndDate   string     `json:"toDate"`
+		MinSlots  int        `json:"minSlots"`
 	}
 	var input Input
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -180,7 +212,7 @@ func getAppointments(c *gin.Context) {
 	}
 	var allSlots []Slots
 	for _, loc := range input.Locations {
-		slots, err := getNearestBooking(loc, MinSlotsPerDay, input.Auth)
+		slots, err := getNearestBooking(loc, input.MinSlots, input.StartDate, input.EndDate, Auth)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"err": err.Error(), "errType": "getNearestBooking"})
 			return
