@@ -10,33 +10,44 @@ findAppointments = async function() {
     let toDate = $("#toDate").val();
     let minSlots = parseInt($("#minSlots").val());
     let maxNearestLocations = parseInt($("#maxNearestLocations").val());
-    let locations = await axios.post('/locations', {
-        maxNearestLocations,
-        lat,
-        lng
-    });
+    let locations;
+    try {
+        locations = await axios.post('/locations', {
+            maxNearestLocations,
+            lat,
+            lng
+        });
+    } catch (err) {
+        updateStatus(`שגיאה - ${err.message}`);
+        return;
+    }
+    
     const locNames = locations.data.map(l => l.LocationName);
     let foundCount=0;
     updateStatus(`מחפש בלשכות הבאות: ${locNames.join(",")}`);
     for (let i=0; i<locations.data.length; i++) {
         updateStatus(`מחפש ב: ${locNames[i]}`);
-        let data = await axios.post('/appointments', {
-            "locations": [ locations.data[i] ],
-            "fromDate": fromDate,
-            "toDate": toDate,
-            "minSlots": minSlots,
-        });
-        if (!data.data || data.data.length == 0) {
-            // nothing found here
-        } else {
-            foundCount += data.data.length;
-            addSlotsToTable(data.data);
+        try {
+            let data = await axios.post('/appointments', {
+                "locations": [ locations.data[i] ],
+                "fromDate": fromDate,
+                "toDate": toDate,
+                "minSlots": minSlots,
+            });
+            if (!data.data || data.data.length == 0) {
+                // nothing found here
+            } else {
+                foundCount += data.data.length;
+                addSlotsToTable(data.data);
+            }
+        } catch (err) {
+            console.error(`שגיאה - ${err.message}`)
         }
-        if (!foundCount) {
-            updateStatus("לא נמצאו תורים")
-        } else {
-            updateStatus("החיפוש הסתיים")
-        }
+    }
+    if (!foundCount) {
+        updateStatus("לא נמצאו תורים")
+    } else {
+        updateStatus("החיפוש הסתיים")
     }
     
 }
@@ -56,13 +67,18 @@ async function getCurrentLocation() {
     let data;
     const pos = await getPosition(geoOptions);
     const mapUrl = `https://www.mapquestapi.com/geocoding/v1/reverse?key=IkcEuF1QqyNeGJiTzzMSMtztCFG4A93V&location=${pos.coords.latitude}%2C${pos.coords.longitude}&outFormat=json&thumbMaps=false`
-    data = await axios.get(mapUrl);
-    data = data.data;
-    if (data && data.results && data.results.length > 0 && data.results[0].locations && data.results[0].locations.length > 0) {
-        updateStatus("לחץ על חפש כדי לחפש תורים פנויים")
-        const loc = data.results[0].locations[0];
-        return {"city": loc.adminArea5, "street": loc.street, "lat": pos.coords.latitude, "lng": pos.coords.longitude};
-    };
+    try {
+        data = await axios.get(mapUrl);
+        data = data.data;
+        if (data && data.results && data.results.length > 0 && data.results[0].locations && data.results[0].locations.length > 0) {
+            updateStatus("לחץ על חפש כדי לחפש תורים פנויים")
+            const loc = data.results[0].locations[0];
+            return {"city": loc.adminArea5, "street": loc.street, "lat": pos.coords.latitude, "lng": pos.coords.longitude};
+        };
+    } catch (err) {
+        updateStatus(`שגיאה - ${err.message}`)
+    }
+    
 }
 
 function prettyDate(date) {
