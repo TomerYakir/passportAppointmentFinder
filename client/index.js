@@ -10,14 +10,14 @@ findAppointments = async function() {
     let fromDate = $("#fromDate").val();
     let toDate = $("#toDate").val();
     let minSlots = parseInt($("#minSlots").val());
-    let locations = await axios.post('http://localhost:8080/locations', {
+    let locations = await axios.post('/locations', {
         maxNearestLocations,
         lat,
         lng
     });
     const locNames = locations.data.map(l => l.LocationName);
     updateStatus(`מחפש בלשכות הבאות: ${locNames.join(",")}`);
-    let data = await axios.post('http://localhost:8080/appointments', {
+    let data = await axios.post('/appointments', {
         "locations": locations.data,
         "fromDate": fromDate,
         "toDate": toDate,
