@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -13,14 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	ConsoleGreen = "\033[32m"
-	ConsoleReset = "\033[0m"
-
-	// Current coordinates
-	MaxNearestLocations = 5
-	MinSlotsPerDay      = 1
-)
+const Auth = "JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6InljeDFyWFRmalRjQjZIQWV1aGxWQklZZmZUbyJ9.eyJpc3MiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJhdWQiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJuYmYiOjE2NDk2NzkyOTEsImV4cCI6MTY4MDc4MzI5MSwidW5pcXVlX25hbWUiOiI4NWNhYjBlYS1mZmQ1LTQyN2EtOGY5ZS1mNDRhNzllZTIyMzYifQ.HHWPOnU977opC033SMXi1TbVsCfZYrWXcs8Up4FLN98Qpnq3dQE0lVHUNGeHzHMVqFvIAMP10X9A5kTqoVdM_iymRdW_VCL7KnhbYxFzp-SuDzfEEV3y9r-cSYcKnxGbJTXGR23aJBOPNR3Uw37GX6RWsClDKASCBNQMfSfCl8ZlJcnZaCMyaHZl6shp3o0u-ldva98aOhhTK2epVveP5Xwvfzi1xVgRAo9hP5eSVOEumTINDrX9APL2tjHqLux6MYczQEMarLWtjvqHTSYJ4lyX88fSYZHxXR0gypTh54zvHMko_HVY6Cu88kzLcS5dm3E0PMWF-hRpA-cR62fVWw"
 
 type Location struct {
 	Name      string `json:"LocationName"`
@@ -165,14 +159,10 @@ func getNearestBooking(loc Location, minRes int, startDate, toDate, authToken st
 		}
 		for _, t := range slotRes.Results {
 			slots = append(slots, Slots{loc.Name, cal.CalendarDate, fmt.Sprintf("%d:%d", t.Time/60, t.Time%60)})
-			fmt.Printf("%vAvailable slot at %s - date=%s, time=%d:%d%v\n", ConsoleGreen, loc.Name, cal.CalendarDate, t.Time/60, t.Time%60, ConsoleReset)
+			fmt.Printf("Available slot at %s - date=%s, time=%d:%d\n", loc.Name, cal.CalendarDate, t.Time/60, t.Time%60)
 		}
 	}
 	return slots, nil
-}
-
-func hello(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"data": "hello"})
 }
 
 func getLocationHandler(c *gin.Context) {
@@ -194,8 +184,6 @@ func getLocationHandler(c *gin.Context) {
 
 	c.JSON(http.StatusOK, locs)
 }
-
-const Auth string = "JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6InljeDFyWFRmalRjQjZIQWV1aGxWQklZZmZUbyJ9.eyJpc3MiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJhdWQiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJuYmYiOjE2NDk2NzkyOTEsImV4cCI6MTY4MDc4MzI5MSwidW5pcXVlX25hbWUiOiI4NWNhYjBlYS1mZmQ1LTQyN2EtOGY5ZS1mNDRhNzllZTIyMzYifQ.HHWPOnU977opC033SMXi1TbVsCfZYrWXcs8Up4FLN98Qpnq3dQE0lVHUNGeHzHMVqFvIAMP10X9A5kTqoVdM_iymRdW_VCL7KnhbYxFzp-SuDzfEEV3y9r-cSYcKnxGbJTXGR23aJBOPNR3Uw37GX6RWsClDKASCBNQMfSfCl8ZlJcnZaCMyaHZl6shp3o0u-ldva98aOhhTK2epVveP5Xwvfzi1xVgRAo9hP5eSVOEumTINDrX9APL2tjHqLux6MYczQEMarLWtjvqHTSYJ4lyX88fSYZHxXR0gypTh54zvHMko_HVY6Cu88kzLcS5dm3E0PMWF-hRpA-cR62fVWw"
 
 func getAppointments(c *gin.Context) {
 	type Input struct {
@@ -224,20 +212,28 @@ func getAppointments(c *gin.Context) {
 
 func main() {
 
+	clientHtml, err := os.ReadFile("client/index.html")
+	if err != nil {
+		panic(err)
+	}
+	clientIndex, err := os.ReadFile("client/index.js")
+	if err != nil {
+		panic(err)
+	}
 	r := gin.Default()
 	r.Use(cors.Default())
-	r.GET("/hello", hello)
+	r.Use(gin.Logger())
+	r.Static("/static", "static")
+	r.GET("/", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", clientHtml)
+	})
+	r.GET("/index.js", func(c *gin.Context) {
+		c.Data(http.StatusOK, "text/html; charset=utf-8", clientIndex)
+	})
 	r.POST("/locations", getLocationHandler)
 	r.POST("/appointments", getAppointments)
 	if err := r.Run(); err != nil {
 		panic(err)
 	}
 
-	/*
-		locs, err := getLocations(MaxNearestLocations, Lat, Lng)
-		if err != nil {
-			panic(err)
-		}
-
-	*/
 }

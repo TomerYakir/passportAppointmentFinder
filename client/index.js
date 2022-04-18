@@ -23,8 +23,11 @@ findAppointments = async function() {
         "toDate": toDate,
         "minSlots": minSlots,
     });
-    debugger;
-    addSlotsToTable(data.data);
+    if (!data.data || data.data.length == 0) {
+        updateStatus("לא נמצאו תורים")
+    } else {
+        addSlotsToTable(data.data);
+    }
 }
  
 function getPosition(options) {
