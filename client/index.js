@@ -16,18 +16,27 @@ findAppointments = async function() {
         lng
     });
     const locNames = locations.data.map(l => l.LocationName);
+    let foundCount=0;
     updateStatus(`מחפש בלשכות הבאות: ${locNames.join(",")}`);
-    let data = await axios.post('/appointments', {
-        "locations": locations.data,
-        "fromDate": fromDate,
-        "toDate": toDate,
-        "minSlots": minSlots,
-    });
-    if (!data.data || data.data.length == 0) {
-        updateStatus("לא נמצאו תורים")
-    } else {
-        addSlotsToTable(data.data);
+    for (let i=0; i<locations.data.length; i++) {
+        updateStatus(`מחפש ב: ${locNames[i]}`);
+        let data = await axios.post('/appointments', {
+            "locations": [ locations.data[i] ],
+            "fromDate": fromDate,
+            "toDate": toDate,
+            "minSlots": minSlots,
+        });
+        if (!data.data || data.data.length == 0) {
+            // nothing found here
+        } else {
+            foundCount += data.data.length;
+            addSlotsToTable(data.data);
+        }
+        if (!foundCount) {
+            updateStatus("לא נמצאו תורים")
+        }
     }
+    
 }
  
 function getPosition(options) {
