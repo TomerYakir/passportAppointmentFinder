@@ -45,7 +45,7 @@ findAppointments = async function() {
         }
     }
     if (!foundCount) {
-        updateStatus("לא נמצאו תורים")
+        updateStatus("לא נמצאו תורים. נסו לשנות פרמטרים")
     } else {
         updateStatus("החיפוש הסתיים")
     }
