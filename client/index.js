@@ -4,12 +4,12 @@ updateStatus = function(status) {
 
 findAppointments = async function() {
     updateStatus("מחפש...");
-    const maxNearestLocations = 5;
     let lat = parseFloat($("#lat").val());
     let lng = parseFloat($("#lng").val());
     let fromDate = $("#fromDate").val();
     let toDate = $("#toDate").val();
     let minSlots = parseInt($("#minSlots").val());
+    let maxNearestLocations = parseInt($("#maxNearestLocations").val());
     let locations = await axios.post('/locations', {
         maxNearestLocations,
         lat,
@@ -34,6 +34,8 @@ findAppointments = async function() {
         }
         if (!foundCount) {
             updateStatus("לא נמצאו תורים")
+        } else {
+            updateStatus("החיפוש הסתיים")
         }
     }
     
