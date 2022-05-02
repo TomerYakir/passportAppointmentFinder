@@ -14,7 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const Auth = "JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6InljeDFyWFRmalRjQjZIQWV1aGxWQklZZmZUbyJ9.eyJpc3MiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJhdWQiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJuYmYiOjE2NDk2NzkyOTEsImV4cCI6MTY4MDc4MzI5MSwidW5pcXVlX25hbWUiOiI4NWNhYjBlYS1mZmQ1LTQyN2EtOGY5ZS1mNDRhNzllZTIyMzYifQ.HHWPOnU977opC033SMXi1TbVsCfZYrWXcs8Up4FLN98Qpnq3dQE0lVHUNGeHzHMVqFvIAMP10X9A5kTqoVdM_iymRdW_VCL7KnhbYxFzp-SuDzfEEV3y9r-cSYcKnxGbJTXGR23aJBOPNR3Uw37GX6RWsClDKASCBNQMfSfCl8ZlJcnZaCMyaHZl6shp3o0u-ldva98aOhhTK2epVveP5Xwvfzi1xVgRAo9hP5eSVOEumTINDrX9APL2tjHqLux6MYczQEMarLWtjvqHTSYJ4lyX88fSYZHxXR0gypTh54zvHMko_HVY6Cu88kzLcS5dm3E0PMWF-hRpA-cR62fVWw"
+const Auth = "JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6InljeDFyWFRmalRjQjZIQWV1aGxWQklZZmZUbyJ9.eyJpc3MiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJhdWQiOiJodHRwOi8vY2VudHJhbC5xbm9teS5jb20iLCJuYmYiOjE2NDk1Nzc3NzcsImV4cCI6MTY4MDY4MTc3NywidW5pcXVlX25hbWUiOiI4NWNhYjBlYS1mZmQ1LTQyN2EtOGY5ZS1mNDRhNzllZTIyMzYifQ.FtFbXIAVavbZgr2XuzSVJWFOwtysKVqh2-DB2GhmAZgfgOCDskxJGtrUY4g5V41Ly-WuA_5ofbGBd2nAxHO8pfP47bk8ec7YEra0FJRpXxJkrNXiFciJlcw3QFJa7h2CSqj_sVi2eEhgJwa5GPLPRZZE-G1wgUzHJlSg3rgmRvpHb75bqPQi6WGXPvusXa_8IvUd0WQdW5X0_HM6SnNkfO6AlBJm-OmYESMi9NPKj-gr-p5MKpY8rC4mjVcpzQ9bjJndcqXbxEKo0n68Wd7BS1yhBEXXchFCMGBNgEVkbm5jRt5D_Kp3xfJRVR7f1oiMkn6RxqQrsA29FKHShxNwPQ"
 
 type Location struct {
 	Name      string `json:"LocationName"`
@@ -30,19 +30,18 @@ func getLocations(top int, lat, lng float64) ([]Location, error) {
 	}
 	locationQuery := `https://central.qnomy.com/CentralAPI/LocationSearch?currentPage=1&isFavorite=false&orderBy=Distance&organizationId=56&position=%7B%22lat%22:%22` + fmt.Sprintf("%v", lat) +
 		`%22,%22lng%22:%22` + fmt.Sprintf("%v", lng) + `%22,%22accuracy%22:1440%7D&resultsInPage=100&serviceTypeId=156&src=mvws`
-	resp, err := http.Get(locationQuery)
+	body, err := doAuthRequest(locationQuery, Auth)
 	if err != nil {
-		return nil, err
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
+		log.Println("failed to do auth request", err)
 		return nil, err
 	}
 	var res Res
 	if err := json.Unmarshal(body, &res); err != nil {
+		log.Println("failed to unmarshal", string(body), err)
 		return nil, err
 	}
 	if !res.Success {
+		log.Println("got success false. full response", string(body))
 		return nil, fmt.Errorf("got success=false from getLocations. full res=%v", res)
 	}
 	if len(res.Results) <= top {
@@ -52,11 +51,14 @@ func getLocations(top int, lat, lng float64) ([]Location, error) {
 }
 
 func doAuthRequest(url, authToken string) ([]byte, error) {
+	log.Println("doing request", url)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", authToken)
+	if authToken != "" {
+		req.Header.Add("Authorization", authToken)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -64,6 +66,9 @@ func doAuthRequest(url, authToken string) ([]byte, error) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("got response code %d. full response: %v", resp.StatusCode, body)
 	}
 	return body, nil
 }
@@ -112,7 +117,7 @@ func getNearestBooking(loc Location, minRes int, startDate, toDate, authToken st
 		Results      []CalendarSlot `json:"Results"`
 	}
 	url := fmt.Sprintf("https://central.qnomy.com/CentralAPI/SearchAvailableDates?maxResults=50&serviceId=%v&startDate=%s", loc.ServiceId, startDate)
-	fmt.Printf("searching for %s using serviceId %v\n", loc.Name, loc.ServiceId)
+	log.Printf("searching for %s using serviceId %v\n", loc.Name, loc.ServiceId)
 	body, err := doAuthRequest(url, authToken)
 	if err != nil {
 		return nil, err
@@ -125,17 +130,17 @@ func getNearestBooking(loc Location, minRes int, startDate, toDate, authToken st
 		return nil, fmt.Errorf("got success=false from get dates. full res=%v", res)
 	}
 	if len(res.Results) == 0 {
-		fmt.Printf("got 0 results for %s\n", loc.Name)
+		log.Printf("got 0 results for %s\n", loc.Name)
 		return nil, nil
 	}
 	for _, cal := range res.Results {
-		fmt.Printf("checking date %s\n", cal.CalendarDate)
+		log.Printf("checking date %s\n", cal.CalendarDate)
 		isAfter, err := isStrDateAfterDate(cal.CalendarDate, toDate)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse dates. err=%v", err)
 		}
 		if isAfter {
-			fmt.Printf("date %s is beyond end date=%s\n", cal.CalendarDate, toDate)
+			log.Printf("date %s is beyond end date=%s\n", cal.CalendarDate, toDate)
 			break
 		}
 		url := fmt.Sprintf("https://central.qnomy.com/CentralAPI/SearchAvailableSlots?CalendarId=%v&ServiceId=%v", cal.CalendarId, loc.ServiceId)
@@ -151,15 +156,15 @@ func getNearestBooking(loc Location, minRes int, startDate, toDate, authToken st
 			return nil, fmt.Errorf("got success=false from get slots. full res=%v", slotRes)
 		}
 		if len(slotRes.Results) == 0 {
-			fmt.Printf("got 0 results\n")
+			log.Printf("got 0 results\n")
 		}
 		if len(slotRes.Results) < minRes {
-			fmt.Printf("not enough slots for the day. proceeding\n")
+			log.Printf("not enough slots for the day. proceeding\n")
 			continue
 		}
 		for _, t := range slotRes.Results {
 			slots = append(slots, Slots{loc.Name, cal.CalendarDate, fmt.Sprintf("%d:%d", t.Time/60, t.Time%60)})
-			fmt.Printf("Available slot at %s - date=%s, time=%d:%d\n", loc.Name, cal.CalendarDate, t.Time/60, t.Time%60)
+			log.Printf("Available slot at %s - date=%s, time=%d:%d\n", loc.Name, cal.CalendarDate, t.Time/60, t.Time%60)
 		}
 	}
 	return slots, nil
